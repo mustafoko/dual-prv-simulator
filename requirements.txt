@@ -1,0 +1,6 @@
+# No external dependencies required for core functionality
+# This project uses only Python standard library for simulation
+# Python 3.8+ required
+
+# Optional: For plotting and visualization
+matplotlib>=3.5.0
