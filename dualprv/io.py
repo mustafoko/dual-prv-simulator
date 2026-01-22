@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import math
 from dataclasses import asdict
 from typing import List, Optional, Tuple
 
@@ -255,3 +256,257 @@ def generate_rapid_changes_trace(path: str, dt: float = 0.2, T: float = 40.0) ->
             })
     
     print(f"Wrote rapid-changes trace: {path}")
+
+
+def generate_early_warning_trace(path: str, dt: float = 0.2, T: float = 50.0) -> None:
+    """
+    Generate trace designed to show early warning benefit of dual PRV.
+    Human intent provides early warning of conflicts before they occur.
+    """
+    n = int(T / dt) + 1
+    goals = ["A", "B", "C", "D"]
+    
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["t", "intent_slot", "intent_conf", "robot_goal_slot"])
+        w.writeheader()
+        for i in range(n):
+            t = i * dt
+            
+            # Robot goal changes every 10 seconds
+            robot_goal_idx = (i // int(10.0 / dt)) % len(goals)
+            robot_goal = goals[robot_goal_idx]
+            
+            # Human intent predicts robot's NEXT goal 5 seconds early
+            # This gives learned branch early warning advantage
+            next_goal_idx = (robot_goal_idx + 1) % len(goals)
+            next_goal = goals[next_goal_idx]
+            
+            # Human shows intent toward next goal early (high confidence)
+            if t < 5.0 or (t % 10.0) < 5.0:
+                intent_slot = next_goal  # Predicting future conflict
+                conf = 0.95  # Very high confidence
+            else:
+                intent_slot = robot_goal  # Current conflict
+                conf = 0.90
+            
+            w.writerow({
+                "t": f"{t:.3f}",
+                "intent_slot": intent_slot,
+                "intent_conf": f"{conf:.3f}",
+                "robot_goal_slot": robot_goal,
+            })
+    
+    print(f"Wrote early-warning trace: {path}")
+
+
+def generate_varying_confidence_trace(path: str, dt: float = 0.2, T: float = 45.0) -> None:
+    """
+    Generate trace with varying intent detection confidence.
+    Tests how dual PRV adapts to confidence levels.
+    """
+    n = int(T / dt) + 1
+    goals = ["A", "B", "C", "D"]
+    
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["t", "intent_slot", "intent_conf", "robot_goal_slot"])
+        w.writeheader()
+        for i in range(n):
+            t = i * dt
+            
+            robot_goal_idx = (i // int(7.0 / dt)) % len(goals)
+            robot_goal = goals[robot_goal_idx]
+            
+            intent_slot = goals[(i // int(5.0 / dt)) % len(goals)]
+            
+            # Varying confidence: high -> medium -> low -> high cycle
+            conf_phase = (i // int(3.0 / dt)) % 4
+            if conf_phase == 0:
+                conf = 0.95  # Very high
+            elif conf_phase == 1:
+                conf = 0.85  # High
+            elif conf_phase == 2:
+                conf = 0.75  # Medium (below p_min=0.8, should reduce advisory)
+            else:
+                conf = None  # Out of coverage
+            
+            w.writerow({
+                "t": f"{t:.3f}",
+                "intent_slot": intent_slot,
+                "intent_conf": "" if conf is None else f"{conf:.3f}",
+                "robot_goal_slot": robot_goal,
+            })
+    
+    print(f"Wrote varying-confidence trace: {path}")
+
+
+def generate_cooperative_trace(path: str, dt: float = 0.2, T: float = 50.0) -> None:
+    """
+    Generate trace where human and robot coordinate (low conflict, high efficiency).
+    Dual PRV should show significant efficiency gains here.
+    """
+    n = int(T / dt) + 1
+    goals = ["A", "B", "C", "D"]
+    
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["t", "intent_slot", "intent_conf", "robot_goal_slot"])
+        w.writeheader()
+        for i in range(n):
+            t = i * dt
+            
+            # Robot cycles through goals
+            robot_goal_idx = (i // int(8.0 / dt)) % len(goals)
+            robot_goal = goals[robot_goal_idx]
+            
+            # Human coordinates: moves to different slot, high confidence
+            # This allows learned branch to predict no conflict
+            human_slots = [g for g in goals if g != robot_goal]
+            human_idx = (i // int(6.0 / dt)) % len(human_slots)
+            intent_slot = human_slots[human_idx]
+            conf = 0.93  # High confidence about coordination
+            
+            w.writerow({
+                "t": f"{t:.3f}",
+                "intent_slot": intent_slot,
+                "intent_conf": f"{conf:.3f}",
+                "robot_goal_slot": robot_goal,
+            })
+    
+    print(f"Wrote cooperative trace: {path}")
+
+
+def generate_challenging_trace(path: str, dt: float = 0.2, T: float = 60.0) -> None:
+    """
+    Generate challenging trace with complex conflict patterns.
+    Tests robustness of PRV systems.
+    """
+    n = int(T / dt) + 1
+    goals = ["A", "B", "C", "D"]
+    
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["t", "intent_slot", "intent_conf", "robot_goal_slot"])
+        w.writeheader()
+        for i in range(n):
+            t = i * dt
+            
+            # Complex robot goal pattern
+            if t < 15.0:
+                robot_goal = "A"
+            elif t < 25.0:
+                robot_goal = "B"
+            elif t < 35.0:
+                robot_goal = "C"
+            elif t < 45.0:
+                robot_goal = "D"
+            else:
+                robot_goal_idx = (i // int(4.0 / dt)) % len(goals)
+                robot_goal = goals[robot_goal_idx]
+            
+            # Human intent: sometimes conflicts, sometimes avoids
+            phase = int(t / 10.0) % 4
+            if phase == 0:
+                intent_slot = robot_goal  # Conflict
+                conf = 0.90
+            elif phase == 1:
+                intent_slot = goals[(goals.index(robot_goal) + 1) % len(goals)]  # Avoid
+                conf = 0.88
+            elif phase == 2:
+                intent_slot = robot_goal  # Conflict again
+                conf = 0.92
+            else:
+                intent_slot = ""  # No intent
+                conf = None
+            
+            w.writerow({
+                "t": f"{t:.3f}",
+                "intent_slot": intent_slot,
+                "intent_conf": "" if conf is None else f"{conf:.3f}",
+                "robot_goal_slot": robot_goal,
+            })
+    
+    print(f"Wrote challenging trace: {path}")
+
+
+def generate_long_trace(path: str, dt: float = 0.2, T: float = 120.0) -> None:
+    """
+    Generate long trace for extended simulation.
+    """
+    n = int(T / dt) + 1
+    goals = ["A", "B", "C", "D"]
+    
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["t", "intent_slot", "intent_conf", "robot_goal_slot"])
+        w.writeheader()
+        for i in range(n):
+            t = i * dt
+            
+            # Robot goal changes periodically
+            robot_goal_idx = (i // int(15.0 / dt)) % len(goals)
+            robot_goal = goals[robot_goal_idx]
+            
+            # Human intent varies
+            intent_idx = (i // int(12.0 / dt)) % len(goals)
+            intent_slot = goals[intent_idx]
+            
+            # Confidence varies with time
+            conf = 0.80 + 0.15 * math.sin(t / 10.0)
+            conf = max(0.75, min(0.95, conf))
+            
+            w.writerow({
+                "t": f"{t:.3f}",
+                "intent_slot": intent_slot,
+                "intent_conf": f"{conf:.3f}",
+                "robot_goal_slot": robot_goal,
+            })
+    
+    print(f"Wrote long trace: {path}")
+
+
+def generate_proactive_advisory_trace(path: str, dt: float = 0.2, T: float = 50.0) -> None:
+    """
+    Generate trace specifically designed to show proactive advisory benefit.
+    
+    Scenario: Human intent shows conflicts coming early (high confidence).
+    Learned branch sees conflicts before formal does, triggers ADVISORY early.
+    ADVISORY slows robot, preventing violations and avoiding CRITICAL stops.
+    Conservative mode would trigger CRITICAL too often.
+    """
+    n = int(T / dt) + 1
+    goals = ["A", "B", "C", "D"]
+    
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["t", "intent_slot", "intent_conf", "robot_goal_slot"])
+        w.writeheader()
+        for i in range(n):
+            t = i * dt
+            
+            # Robot goal changes every 8 seconds
+            robot_goal_idx = (i // int(8.0 / dt)) % len(goals)
+            robot_goal = goals[robot_goal_idx]
+            
+            # Human intent shows conflicts EARLY (before robot reaches goal)
+            # This allows learned branch to predict conflicts early and trigger ADVISORY
+            # Pattern: Human shows intent toward robot's goal 2-3 seconds before robot reaches it
+            time_in_cycle = t % 8.0
+            
+            if 0.0 <= time_in_cycle < 2.0:
+                # Early phase: Human shows intent toward robot's goal (conflict coming)
+                # Learned sees this early and can trigger ADVISORY before formal sees violation
+                intent_slot = robot_goal  # Conflict!
+                conf = 0.94  # Very high confidence - learned knows conflict is coming
+            elif 2.0 <= time_in_cycle < 5.0:
+                # Middle phase: Conflict is happening, but learned already slowed robot
+                intent_slot = robot_goal  # Still conflict
+                conf = 0.92
+            else:
+                # Late phase: Human moves away, no conflict
+                intent_slot = goals[(robot_goal_idx + 1) % len(goals)]
+                conf = 0.88
+            
+            w.writerow({
+                "t": f"{t:.3f}",
+                "intent_slot": intent_slot,
+                "intent_conf": f"{conf:.3f}",
+                "robot_goal_slot": robot_goal,
+            })
+    
+    print(f"Wrote proactive-advisory trace: {path}")

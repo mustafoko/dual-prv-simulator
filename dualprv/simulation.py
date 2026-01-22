@@ -130,14 +130,16 @@ def simulate(
     sim_params: SimParams,
     mode: str,  # "none" | "conservative" | "dual"
     robot_start: Tuple[float, float] = (0.0, 0.0),
-    human_start: Tuple[float, float] = (-0.7, 0.0),
+    human_start: Tuple[float, float] = (-1.2, 0.0),  # Farther apart to allow predictive warnings
     export_debug_csv: Optional[str] = None,
 ) -> RunMetrics:
     """Run simulation and return metrics."""
     if mode not in {"none", "conservative", "dual"}:
         raise ValueError("mode must be one of: none, conservative, dual")
 
-    formal = FormalPRV(safe, slots) if mode in {"conservative", "dual"} else None
+    # Formal branch uses lookahead reachability analysis
+    formal_lookahead = sim_params.formal_lookahead_horizon
+    formal = FormalPRV(safe, slots, lookahead_horizon=formal_lookahead) if mode in {"conservative", "dual"} else None
     learned = LearnedPRV(safe, slots) if mode == "dual" else None
 
     robot = RobotState(x=robot_start[0], y=robot_start[1], v=0.0, goal_slot=trace[0].robot_goal_slot)
@@ -214,7 +216,18 @@ def simulate(
 
             if mode == "conservative":
                 from .models import Verdict
-                m = Mode.CRITICAL if (f_out.verdict == Verdict.FALSE or f_out.dt_violation <= fusion_params.tau_hard) else Mode.NOMINAL
+                # Conservative mode: formal branch checks all possible states within lookahead horizon
+                # It triggers CRITICAL if:
+                # 1. Immediate violation (verdict=FALSE), OR
+                # 2. Violation predicted within tau_hard (imminent threat)
+                # The lookahead horizon allows formal to check future states, but only
+                # violations within tau_hard trigger CRITICAL (hard stop)
+                if f_out.verdict == Verdict.FALSE:
+                    m = Mode.CRITICAL  # Immediate violation
+                elif f_out.verdict == Verdict.C_FALSE and f_out.dt_violation <= fusion_params.tau_hard:
+                    m = Mode.CRITICAL  # Violation within tau_hard (imminent)
+                else:
+                    m = Mode.NOMINAL  # Violation exists but not imminent
                 l_out = None
             else:
                 assert learned is not None

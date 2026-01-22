@@ -63,6 +63,7 @@ class SimParams:
     critical_hold_s: float = 0.0
     vel_window: int = 3
     robot_stopped_eps: float = 0.02  # m/s threshold for R_stopped proposition
+    formal_lookahead_horizon: float = 3.0  # seconds - formal branch checks all possible states within this horizon
 
 
 @dataclass

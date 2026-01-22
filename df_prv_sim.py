@@ -69,6 +69,7 @@ def main() -> None:
     ap.add_argument("--t-stop", type=float, default=0.40)
     ap.add_argument("--margin", type=float, default=0.05)
     ap.add_argument("--critical-hold", type=float, default=0.0)
+    ap.add_argument("--formal-lookahead", type=float, default=3.0, help="Formal branch lookahead horizon (seconds)")
 
     args = ap.parse_args()
 
@@ -91,7 +92,10 @@ def main() -> None:
         margin=args.margin,
     )
     ctrl = models.ControllerParams(v_nominal=args.v_nominal, v_advisory=args.v_advisory)
-    sim_params = models.SimParams(critical_hold_s=args.critical_hold)
+    sim_params = models.SimParams(
+        critical_hold_s=args.critical_hold,
+        formal_lookahead_horizon=args.formal_lookahead
+    )
 
     if not args.sweep:
         fusion_params = models.FusionParams(tau_hard=args.tau_hard, tau_soft=args.tau_soft, p_min=args.p_min)

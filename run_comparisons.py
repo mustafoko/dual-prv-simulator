@@ -27,8 +27,10 @@ def main() -> None:
     parser.add_argument("--output-dir", type=str, default="results",
                        help="Directory for output plots (default: results)")
     parser.add_argument("--tau-hard", type=float, default=0.5)
-    parser.add_argument("--tau-soft", type=float, default=1.0)
+    parser.add_argument("--tau-soft", type=float, default=1.5)  # Increased to allow more advisory time
     parser.add_argument("--p-min", type=float, default=0.8)
+    parser.add_argument("--formal-lookahead", type=float, default=3.0,
+                       help="Formal branch lookahead horizon (seconds) for reachability analysis")
     
     # Tuning parameters
     parser.add_argument("--v-nominal", type=float, default=0.8)
@@ -49,13 +51,19 @@ def main() -> None:
     print("Dual PRV Simulation Comparison")
     print("=" * 70)
 
-    # Define trace scenarios
+    # Define trace scenarios - expanded set for comprehensive testing
     trace_scenarios = {
         "default": ("minimal.csv", io.generate_minimal_trace),
         "low_conflict": ("low_conflict.csv", io.generate_low_conflict_trace),
         "high_conflict": ("high_conflict.csv", io.generate_high_conflict_trace),
         "intermittent": ("intermittent_coverage.csv", io.generate_intermittent_coverage_trace),
         "rapid": ("rapid_changes.csv", io.generate_rapid_changes_trace),
+        "early_warning": ("early_warning.csv", io.generate_early_warning_trace),
+        "varying_conf": ("varying_confidence.csv", io.generate_varying_confidence_trace),
+        "cooperative": ("cooperative.csv", io.generate_cooperative_trace),
+        "challenging": ("challenging.csv", io.generate_challenging_trace),
+        "long": ("long_trace.csv", io.generate_long_trace),
+        "proactive_advisory": ("proactive_advisory.csv", io.generate_proactive_advisory_trace),
     }
 
     print("\n1. Generating trace files...")
@@ -77,7 +85,7 @@ def main() -> None:
         margin=args.margin,
     )
     ctrl = models.ControllerParams(v_nominal=args.v_nominal, v_advisory=args.v_advisory)
-    sim_params = models.SimParams()
+    sim_params = models.SimParams(formal_lookahead_horizon=args.formal_lookahead)
     fusion_params = models.FusionParams(
         tau_hard=args.tau_hard,
         tau_soft=args.tau_soft,
