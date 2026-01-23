@@ -1,0 +1,4 @@
+time,human_status,human_target,human_remaining,human_at_A,human_at_B,human_at_C,human_at_D,robot_status,robot_mode,robot_target,robot_remaining,robot_at_A,robot_at_B,robot_at_C,robot_at_D,prv_mode,delta_t_formal,delta_t_learned,confidence,safety_violation
+0.0,MOVING,A,5.2,False,False,False,False,MOVING,NORMAL,B,6.8,False,False,False,False,NOMINAL,inf,inf,0.0,False
+0.5,MOVING,A,4.7,False,False,False,False,MOVING,NORMAL,B,6.3,False,False,False,False,NOMINAL,inf,inf,0.0,False
+1.0,MOVING,A,4.2,False,False,False,False,MOVING,NORMAL,B,5.8,False,False,False,False,NOMINAL,inf,inf,0.0,False

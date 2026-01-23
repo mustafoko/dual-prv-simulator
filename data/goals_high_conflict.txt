@@ -1,0 +1,9 @@
+# Goal Sequences for High Conflict Scenario
+# Human and robot repeatedly target the same slots
+# This creates maximum contention requiring PRV intervention
+
+# Human goal sequence (5 goals)
+human: A, B, C, D, A
+
+# Robot goal sequence (5 goals) - same order causes conflicts
+robot: A, B, C, D, A

@@ -14,9 +14,12 @@ Reference: Dual-Future PRV paper concepts for monotone fusion policy
 
 import random
 import statistics
+import csv
+import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import List, Dict, Tuple, Optional
+from pathlib import Path
 import argparse
 
 # Try to import matplotlib for optional plotting
@@ -235,6 +238,174 @@ def generate_random_sequence(n_goals: int, allow_repeats: bool = False) -> List[
             available = [s for s in SLOTS if s != sequence[-1]]
             sequence.append(random.choice(available))
     return sequence
+
+
+# =============================================================================
+# FILE I/O - GOALS AND TRACES
+# =============================================================================
+
+def load_goals_from_file(filepath: str) -> Tuple[List[str], List[str]]:
+    """
+    Load goal sequences from a text file.
+    
+    File format:
+        # Comments start with #
+        human: A, B, C, D, ...
+        robot: B, C, A, D, ...
+    
+    Args:
+        filepath: Path to the goals file
+    
+    Returns:
+        Tuple of (human_goals, robot_goals)
+    """
+    human_goals = []
+    robot_goals = []
+    
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
+            
+            if line.lower().startswith('human:'):
+                goals_str = line.split(':', 1)[1]
+                human_goals = [g.strip().upper() for g in goals_str.split(',')]
+            elif line.lower().startswith('robot:'):
+                goals_str = line.split(':', 1)[1]
+                robot_goals = [g.strip().upper() for g in goals_str.split(',')]
+    
+    # Validate goals
+    for goals, name in [(human_goals, 'human'), (robot_goals, 'robot')]:
+        for g in goals:
+            if g not in SLOTS:
+                raise ValueError(f"Invalid slot '{g}' in {name} goals. Valid slots: {SLOTS}")
+    
+    if not human_goals:
+        raise ValueError("No human goals found in file")
+    if not robot_goals:
+        raise ValueError("No robot goals found in file")
+    
+    return human_goals, robot_goals
+
+
+def save_goals_to_file(filepath: str, human_goals: List[str], robot_goals: List[str]):
+    """
+    Save goal sequences to a text file.
+    
+    Args:
+        filepath: Path to save the goals file
+        human_goals: Human goal sequence
+        robot_goals: Robot goal sequence
+    """
+    with open(filepath, 'w') as f:
+        f.write("# Goal Sequences for Dual-Future PRV Simulation\n")
+        f.write("# Format: One line per agent, comma-separated slot names\n")
+        f.write(f"# Slots: {', '.join(SLOTS)}\n")
+        f.write("# Lines starting with # are comments\n\n")
+        f.write(f"human: {', '.join(human_goals)}\n\n")
+        f.write(f"robot: {', '.join(robot_goals)}\n")
+
+
+def save_trace_to_csv(filepath: str, logs: List['SimulationLog']):
+    """
+    Save simulation trace to a CSV file.
+    
+    Args:
+        filepath: Path to save the CSV file
+        logs: List of SimulationLog entries
+    """
+    if not logs:
+        return
+    
+    fieldnames = [
+        'time',
+        'human_status', 'human_target', 'human_remaining',
+        'human_at_A', 'human_at_B', 'human_at_C', 'human_at_D',
+        'robot_status', 'robot_mode', 'robot_target', 'robot_remaining',
+        'robot_at_A', 'robot_at_B', 'robot_at_C', 'robot_at_D',
+        'prv_mode', 'delta_t_formal', 'delta_t_learned', 'confidence',
+        'formal_critical', 'learned_advisory'
+    ]
+    
+    with open(filepath, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        
+        for log in logs:
+            row = {
+                'time': f"{log.t:.2f}",
+                'human_status': log.human_status.name,
+                'human_target': log.human_target or '',
+                'human_remaining': f"{log.human_remaining:.2f}",
+                'human_at_A': log.human_at_slots.get('A', False),
+                'human_at_B': log.human_at_slots.get('B', False),
+                'human_at_C': log.human_at_slots.get('C', False),
+                'human_at_D': log.human_at_slots.get('D', False),
+                'robot_status': log.robot_status.name,
+                'robot_mode': log.robot_mode.name,
+                'robot_target': log.robot_target or '',
+                'robot_remaining': f"{log.robot_remaining:.2f}",
+                'robot_at_A': log.robot_at_slots.get('A', False),
+                'robot_at_B': log.robot_at_slots.get('B', False),
+                'robot_at_C': log.robot_at_slots.get('C', False),
+                'robot_at_D': log.robot_at_slots.get('D', False),
+                'prv_mode': log.prv_output.fused_mode.name,
+                'delta_t_formal': f"{log.prv_output.delta_t_formal:.2f}" if log.prv_output.delta_t_formal < 1000 else 'inf',
+                'delta_t_learned': f"{log.prv_output.delta_t_learned:.2f}" if log.prv_output.delta_t_learned < 1000 else 'inf',
+                'confidence': f"{log.prv_output.confidence:.3f}",
+                'formal_critical': log.prv_output.formal_critical,
+                'learned_advisory': log.prv_output.learned_advisory
+            }
+            writer.writerow(row)
+
+
+def load_trace_from_csv(filepath: str) -> List[Dict]:
+    """
+    Load simulation trace from a CSV file.
+    
+    Args:
+        filepath: Path to the CSV file
+    
+    Returns:
+        List of dictionaries with trace data
+    """
+    traces = []
+    with open(filepath, 'r', newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            # Convert string values to appropriate types
+            trace = {
+                'time': float(row['time']),
+                'human_status': row['human_status'],
+                'human_target': row['human_target'] or None,
+                'human_remaining': float(row['human_remaining']),
+                'human_at_slots': {
+                    'A': row['human_at_A'] == 'True',
+                    'B': row['human_at_B'] == 'True',
+                    'C': row['human_at_C'] == 'True',
+                    'D': row['human_at_D'] == 'True',
+                },
+                'robot_status': row['robot_status'],
+                'robot_mode': row['robot_mode'],
+                'robot_target': row['robot_target'] or None,
+                'robot_remaining': float(row['robot_remaining']),
+                'robot_at_slots': {
+                    'A': row['robot_at_A'] == 'True',
+                    'B': row['robot_at_B'] == 'True',
+                    'C': row['robot_at_C'] == 'True',
+                    'D': row['robot_at_D'] == 'True',
+                },
+                'prv_mode': row['prv_mode'],
+                'delta_t_formal': float(row['delta_t_formal']) if row['delta_t_formal'] != 'inf' else float('inf'),
+                'delta_t_learned': float(row['delta_t_learned']) if row['delta_t_learned'] != 'inf' else float('inf'),
+                'confidence': float(row['confidence']),
+                'formal_critical': row['formal_critical'] == 'True',
+                'learned_advisory': row['learned_advisory'] == 'True'
+            }
+            traces.append(trace)
+    return traces
 
 
 # =============================================================================
@@ -1017,6 +1188,12 @@ def main():
                         help='Save plot to file instead of displaying')
     parser.add_argument('--single-run', action='store_true',
                         help='Run single simulation with detailed logging')
+    parser.add_argument('--goals-file', type=str, default=None,
+                        help='Load goals from text file (e.g., data/goals.txt)')
+    parser.add_argument('--trace-file', type=str, default=None,
+                        help='Save simulation trace to CSV file')
+    parser.add_argument('--save-goals', type=str, default=None,
+                        help='Save generated goals to text file')
     
     args = parser.parse_args()
     
@@ -1037,11 +1214,22 @@ def main():
         print("=" * 70)
         
         random.seed(args.seed)
-        human_goals = generate_goal_sequence(n_cycles=3)[:args.n_goals]
-        robot_goals = generate_goal_sequence(n_cycles=3)[:args.n_goals]
+        
+        # Load goals from file or generate
+        if args.goals_file:
+            print(f"\nLoading goals from: {args.goals_file}")
+            human_goals, robot_goals = load_goals_from_file(args.goals_file)
+        else:
+            human_goals = generate_goal_sequence(n_cycles=3)[:args.n_goals]
+            robot_goals = generate_goal_sequence(n_cycles=3)[:args.n_goals]
         
         print(f"\nHuman goals: {human_goals}")
         print(f"Robot goals: {robot_goals}")
+        
+        # Save goals if requested
+        if args.save_goals:
+            save_goals_to_file(args.save_goals, human_goals, robot_goals)
+            print(f"Goals saved to: {args.save_goals}")
         
         # Run dual-PRV
         sim = Simulation(
@@ -1058,6 +1246,11 @@ def main():
         print(f"  Slow-downs: {stats.num_slowdowns}")
         print(f"  Safety violations: {stats.safety_violations}")
         
+        # Save trace to CSV if requested
+        if args.trace_file:
+            save_trace_to_csv(args.trace_file, sim.logs)
+            print(f"\nTrace saved to: {args.trace_file}")
+        
         print_time_series_log(sim.logs)
         
     else:
@@ -1066,6 +1259,10 @@ def main():
         print(f"  Trials: {args.n_trials}")
         print(f"  Goals per agent: {args.n_goals}")
         print(f"  Random seed: {args.seed}")
+        
+        # Note: goals-file not used in MC mode (each trial generates random goals)
+        if args.goals_file:
+            print(f"  Note: --goals-file ignored in Monte-Carlo mode")
         
         runner = ExperimentRunner(
             n_trials=args.n_trials,
