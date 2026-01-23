@@ -1,10 +1,10 @@
 # Goal Sequences for Dual-Future PRV Simulation
-# Format: One line per agent, comma-separated slot names
+# Both human and robot have the SAME goals (maximum conflict scenario)
+# Each goal = place a box at that slot
 # Slots: A, B, C, D
-# Lines starting with # are comments
 
 # Human goal sequence
 human: A, B, D, C, B, A, C, D, A, B, C, D
 
-# Robot goal sequence  
-robot: B, C, A, D, C, B, D, A, B, C, D, A
+# Robot goal sequence (SAME as human - creates contention)
+robot: A, B, D, C, B, A, C, D, A, B, C, D

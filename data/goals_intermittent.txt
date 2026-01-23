@@ -1,9 +1,0 @@
-# Goal Sequences for Intermittent Conflict Scenario
-# Mixed pattern - some conflicts, some smooth operation
-# Tests PRV's ability to handle varying workloads
-
-# Human goal sequence (4 goals)
-human: B, C, A, D
-
-# Robot goal sequence (4 goals) - partial overlap
-robot: A, C, B, D

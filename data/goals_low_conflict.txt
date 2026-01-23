@@ -1,9 +1,0 @@
-# Goal Sequences for Low Conflict Scenario
-# Human and robot mostly target different slots
-# Minimal PRV intervention needed
-
-# Human goal sequence (4 goals)
-human: A, B, D, C
-
-# Robot goal sequence (4 goals) - complementary pattern
-robot: C, D, A, B

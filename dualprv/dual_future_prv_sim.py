@@ -971,12 +971,13 @@ class ExperimentRunner:
         }
         
         for trial in range(self.n_trials):
-            # Generate same goal sequences for fair comparison
-            human_goals = generate_goal_sequence(n_cycles=self.n_goals_per_agent // 4 + 1)
-            human_goals = human_goals[:self.n_goals_per_agent]
+            # Generate goal sequence - BOTH agents have the SAME goals
+            # This creates maximum conflict as they always target the same slot
+            shared_goals = generate_goal_sequence(n_cycles=self.n_goals_per_agent // 4 + 1)
+            shared_goals = shared_goals[:self.n_goals_per_agent]
             
-            robot_goals = generate_goal_sequence(n_cycles=self.n_goals_per_agent // 4 + 1)
-            robot_goals = robot_goals[:self.n_goals_per_agent]
+            human_goals = shared_goals.copy()
+            robot_goals = shared_goals.copy()  # Same goals as human
             
             # Run formal-only baseline
             if self.seed is not None:
@@ -1220,8 +1221,10 @@ def main():
             print(f"\nLoading goals from: {args.goals_file}")
             human_goals, robot_goals = load_goals_from_file(args.goals_file)
         else:
-            human_goals = generate_goal_sequence(n_cycles=3)[:args.n_goals]
-            robot_goals = generate_goal_sequence(n_cycles=3)[:args.n_goals]
+            # Both agents have the SAME goals (maximum conflict scenario)
+            shared_goals = generate_goal_sequence(n_cycles=3)[:args.n_goals]
+            human_goals = shared_goals.copy()
+            robot_goals = shared_goals.copy()
         
         print(f"\nHuman goals: {human_goals}")
         print(f"Robot goals: {robot_goals}")
