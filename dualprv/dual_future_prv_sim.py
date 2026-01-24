@@ -731,18 +731,11 @@ class Simulation:
             
             self.t += DELTA_T
         
-        # Calculate effective completion time:
-        # When robot stops, we lose parallel work capacity.
-        # Each hard stop has a penalty (BASELINE_RESUME_PENALTY).
-        # This penalty time represents work that robot couldn't do.
-        # Human must compensate, but can't fully replace parallel work.
-        # Lost efficiency = num_stops * penalty * collaboration_factor
-        collaboration_loss_factor = 0.4  # Robot contributes ~40% of parallel work
-        penalty_overhead = self.num_stops * BASELINE_RESUME_PENALTY * collaboration_loss_factor
-        effective_completion = self.t + penalty_overhead
+        # Completion time = when all slots are visited (task is done)
+        # This is the natural completion - work is finished when all slots equipped
         
         return RunStatistics(
-            completion_time=effective_completion,
+            completion_time=self.t,
             num_stops=self.num_stops,
             total_stop_duration=self.total_stop_duration,
             num_slowdowns=self.num_slowdowns,
@@ -752,7 +745,11 @@ class Simulation:
         )
     
     def _assign_next_goal(self, agent: AgentState, is_human: bool):
-        """Assign agent to visit an unvisited slot, preferring their goal sequence order."""
+        """Assign agent to visit an unvisited slot, preferring their goal sequence order.
+        
+        For robot (Dual-PRV only): Skip slots that human will clearly reach first.
+        This is a proactive strategy to avoid conflicts.
+        """
         unvisited = self._get_unvisited_slots()
         
         if not unvisited:
@@ -765,12 +762,50 @@ class Simulation:
         target = None
         for goal in agent.goal_sequence[agent.current_goal_idx:]:
             if goal in unvisited:
+                # For robot in Dual-PRV: check if human will clearly reach this slot first
+                if not is_human and self.controller_type == ControllerType.DUAL_PRV:
+                    human_will_reach_first = False
+                    
+                    # Check if human is at or heading to this slot
+                    if self.human.target_slot == goal:
+                        if self.human.status in (AgentStatus.PLACING, AgentStatus.EXITING):
+                            # Human is already AT this slot, will finish soon
+                            human_will_reach_first = True
+                        elif self.human.status == AgentStatus.MOVING:
+                            # Human is heading to this slot
+                            human_time_to_slot = self.human.remaining_time
+                            robot_time_to_slot = (ROBOT_TRAVEL_PLACE_NORMAL_MIN + ROBOT_TRAVEL_PLACE_NORMAL_MAX) / 2
+                            
+                            # If human arrives significantly sooner (>5s lead), skip this slot
+                            if human_time_to_slot + 5.0 < robot_time_to_slot:
+                                human_will_reach_first = True
+                    
+                    if human_will_reach_first:
+                        # Skip this slot, try next in sequence
+                        continue
+                
                 target = goal
                 break
         
-        # If preferred goals all done, pick any remaining unvisited
+        # If preferred goals all done (or all skipped), pick any remaining unvisited
         if target is None and unvisited:
-            target = unvisited[0]
+            # For robot: pick slot human is NOT at/heading to
+            if not is_human:
+                for slot in unvisited:
+                    human_at_or_heading = (
+                        self.human.target_slot == slot and 
+                        self.human.status in (AgentStatus.MOVING, AgentStatus.PLACING, AgentStatus.EXITING)
+                    )
+                    if not human_at_or_heading:
+                        target = slot
+                        break
+                # If no safe slot found, robot waits (human will finish remaining)
+                if target is None:
+                    agent.status = AgentStatus.IDLE
+                    agent.target_slot = None
+                    return
+            else:
+                target = unvisited[0]
         
         if target is None:
             agent.status = AgentStatus.IDLE
@@ -826,17 +861,25 @@ class Simulation:
             if not is_human:
                 contested_slot = agent.target_slot
                 
-                # Can resume when it's SAFE:
-                # 1. Human is not physically at the slot, AND
-                # 2. Human is not heading to the slot (or has different target)
+                # Robot must wait for the PENALTY DURATION before resuming
+                # This represents the time cost of the hard stop
+                penalty_served = False
+                if self.robot_stop_start_time is not None:
+                    time_stopped = self.t - self.robot_stop_start_time
+                    penalty_served = (time_stopped >= BASELINE_RESUME_PENALTY)
+                
+                # Can resume when BOTH:
+                # 1. Penalty has been served (100s waited)
+                # 2. Human is not at the contested slot
                 human_at_slot = self.human.at_slot.get(contested_slot, False)
                 human_heading_to_slot = (self.human.target_slot == contested_slot and 
                                          self.human.status == AgentStatus.MOVING)
+                human_clear = not human_at_slot and not human_heading_to_slot
                 
-                can_resume = contested_slot and not human_at_slot and not human_heading_to_slot
+                can_resume = contested_slot and penalty_served and human_clear
                 
                 if can_resume:
-                    # Record stop duration BEFORE adding penalty
+                    # Record stop duration
                     if self.robot_stop_start_time is not None:
                         self.total_stop_duration += (self.t - self.robot_stop_start_time)
                         self.robot_stop_start_time = None
@@ -846,11 +889,8 @@ class Simulation:
                         # Slot already done - reassign to unvisited slot
                         agent.status = AgentStatus.IDLE
                         self._assign_next_goal(agent, is_human=False)
-                        # Add penalty for the stop
-                        agent.remaining_time += BASELINE_RESUME_PENALTY
                     else:
-                        # Continue to same slot with penalty
-                        agent.remaining_time += BASELINE_RESUME_PENALTY
+                        # Continue to same slot
                         agent.status = AgentStatus.MOVING
             return
         
@@ -919,12 +959,12 @@ class Simulation:
                 if self.robot.stop_accumulator >= ROBOT_STOP_LATENCY:
                     self.robot.status = AgentStatus.STOPPED
                     self.robot.stop_accumulator = 0.0
-                    # Only count as hard stop if slow-down wasn't already handling this conflict
+                    # Only count and penalize hard stop if slow-down wasn't handling this conflict
                     if not self.robot_was_slow:
                         self.num_stops += 1
+                        self.robot_stop_start_time = self.t  # Penalty only for actual hard stops
                     # Reset slow mode tracking ONLY when stop actually happens
                     self.robot_was_slow = False
-                    self.robot_stop_start_time = self.t
                     
         elif prv_output.fused_mode == PRVMode.ADVISORY:
             # Slow down - give human time to pass
