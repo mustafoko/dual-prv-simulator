@@ -1,9 +1,0 @@
-# Long Goal Sequence (12 goals)
-# Both agents have SAME goals - every goal creates a conflict
-# Extended test for statistical significance
-
-# Human goal sequence
-human: A, B, D, C, B, A, C, D, A, B, C, D
-
-# Robot goal sequence (SAME)
-robot: A, B, D, C, B, A, C, D, A, B, C, D

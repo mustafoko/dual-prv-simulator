@@ -1,9 +1,0 @@
-# Short Goal Sequence (4 goals)
-# Both agents have SAME goals - every goal creates a conflict
-# Useful for quick tests
-
-# Human goal sequence
-human: A, B, C, D
-
-# Robot goal sequence (SAME)
-robot: A, B, C, D
