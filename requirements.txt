@@ -1,8 +1,6 @@
-# Dual-Future PRV Simulator Dependencies
+# No external dependencies required for core functionality
+# This project uses only Python standard library for simulation
 # Python 3.8+ required
-
-# Core simulation uses only Python standard library:
-# - random, statistics, dataclasses, enum, typing, argparse
 
 # Optional: For plotting and visualization
 matplotlib>=3.5.0
